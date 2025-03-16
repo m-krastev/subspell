@@ -1,0 +1,16 @@
+[project]
+name = "subspell"
+version = "0.0.1-dev"
+description = "Subtitle spelling, punctuation and grammar correction tool for Bulgarian text"
+readme = "README.md"
+authors = [{ name = "mkrastev", email = "matey_krastev2@hotmail.com" }]
+requires-python = ">=3.10"
+dependencies = ["google-genai", "pysubs2"]
+license = { text = "MIT" }
+
+[project.scripts]
+subspell = "subspell.cli:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
