@@ -1,4 +1,4 @@
-# SpellCheck
+# SubSpell
 
 A command-line tool for spell checking and grammar correction in Bulgarian text, with special support for subtitle files (.srt and .ass).
 
@@ -21,8 +21,8 @@ A command-line tool for spell checking and grammar correction in Bulgarian text,
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/spellcheck.git
-cd spellcheck
+git clone https://github.com/m-krastev/subspell.git
+cd subspell
 
 # Install the package
 pip install -e .
@@ -43,44 +43,44 @@ Or provide it with the `--api-key` option when running the tool.
 ### Correcting Text
 
 ```bash
-spellcheck text "Какво ще правябрат ми жена не ме е остъвила."
+subspell text "Какво ще правябрат ми жена не ме е остъвила."
 ```
 
 ### Correcting Subtitle Files
 
 ```bash
 # Correct an SRT file
-spellcheck file path/to/subtitles.srt
+subspell file path/to/subtitles.srt
 
 # Correct an ASS file with custom output path
-spellcheck file path/to/subtitles.ass -o path/to/corrected.ass
+subspell file path/to/subtitles.ass -o path/to/corrected.ass
 
 # Use token-based batching (default)
-spellcheck file path/to/subtitles.srt --batch-size 0
+subspell file path/to/subtitles.srt --batch-size 0
 
 # Use fixed batch size
-spellcheck file path/to/subtitles.srt --batch-size 10
+subspell file path/to/subtitles.srt --batch-size 10
 ```
 
 ### Advanced Options
 
 ```bash
 # Set maximum tokens per chunk
-spellcheck file path/to/subtitles.srt --max-tokens 4000
+subspell file path/to/subtitles.srt --max-tokens 4000
 
 # Set chunk overlap size
-spellcheck file path/to/subtitles.srt --chunk-overlap 150
+subspell file path/to/subtitles.srt --chunk-overlap 150
 
 # Use a different provider (if implemented)
-spellcheck file path/to/subtitles.srt --provider alternative-provider
+subspell file path/to/subtitles.srt --provider alternative-provider
 ```
 
 ## Development
 
 ### Project Structure
 
-- `src/spellcheck/` - Main package
-  - `spellchecker.py` - Core correction functionality
+- `src/subspell/` - Main package
+  - `subspeller.py` - Core correction functionality
   - `subtitle.py` - Subtitle parsing and writing
   - `cli.py` - Command-line interface
   - `utils.py` - Utility functions
