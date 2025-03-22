@@ -1,186 +1,66 @@
 import os
+import logging
+import json
+import traceback
 from typing import Optional, List, Dict, Any
+from datetime import datetime
+from pathlib import Path
 
 from google import genai
 from google.genai import types
 
 from .base import ModelProvider
+from ..language_rules import BG_SYSTEM_INSTRUCTION
 
+logger = logging.getLogger("subspell-gemini")
 
 class GeminiProvider(ModelProvider):
     """Gemini API provider for spell checking."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
+    def __init__(
+        self,
+        api_key: str,
+        system_instruction: Optional[str] = None,
+        system_instruction_file: Optional[str] = None,
+        temperature: float = 0.2,
+        top_k: int = 40,
+        top_p: float = 0.95,
+        model: str = "gemini-2.0-flash",
+    ):
         """
         Initialize the Gemini provider.
 
         Args:
             api_key: Gemini API key
-            model: Gemini model to use
+            system_instruction: Inline system instruction text
+            system_instruction_file: Path to a file containing system instructions
+            temperature: Controls randomness in the output (0.0 to 1.0)
+            top_k: Controls diversity via top-k sampling
+            top_p: Controls diversity via nucleus sampling
+            model: The Gemini model to use (e.g. "gemini-2.0-flash", "gemini-2.0-flash-experimental")
         """
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
-        if not self.api_key:
-            raise ValueError("Gemini API key is required")
-
-        self.client = genai.Client(api_key=self.api_key)
+        super().__init__(
+            system_instruction=system_instruction,
+            system_instruction_file=system_instruction_file,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+        )
+        self.api_key = api_key
         self.model = model
+        self.client = genai.Client(api_key=api_key)
 
     def _get_system_instruction(self) -> List[types.Part]:
         """Get the system instruction for the model."""
-        return [
-            types.Part.from_text(
-                text="""<instruction>
-Генерирай списък с всички правописни, пунктуационни и граматични грешки, които могат да се намерят в текста. Бъди изчерпателен. 
+        # Try to load custom instruction
+        custom_instruction = self._load_system_instruction()
+        if custom_instruction:
+            logger.info("Using custom system instruction")
+            return [types.Part.from_text(text=custom_instruction)]
 
-**Отговаряй само с коригирания текст.**
-
-</instruction>
-<common_rules>
-7.1. Когато думата е подлог в изречението или пояснява подлога и се съгласува с него, тя се членува с пълен член (-ът или -ят). Може да се направи проверка, като членуваната дума или цялото словосъчетание се замени с той.
-
-Точно в дванайсет часа джентълменът се отправи към големия салон.
-(Точно в дванайсет часа той се отправи към големия салон.)
-
-В прохладния планински град ще ви посрещне спокойният и уютен хотел „Ралица“.
-(В прохладния планински град ще ви посрещне той.)
-
-► Подлогът може да не означава истинския вършител на действието. Щом обаче може да се замести с той, думата се членува с пълен член.
-
-Портретът е бил поръчан на Леонардо да Винчи от съпруга на Лиза дел Джокондо.
-(Той е бил поръчан на Леонардо да Винчи от съпруга на Лиза дел Джокондо.)
-
-7.2. Думата се членува с пълен член, когато е свързана с някой от следните глаголи: съм (ще бъда – бъд. време; бях – мин. време), оказвам се, изглеждам, казвам се, наричам се, ставам (някакъв), оставам (някакъв), представлявам (може да се замести със съм).
-
-Със своите над 5000 записа в радиотеатъра Андрей Чапразов е несъмненият създател на този жанр в България.
-Юджийн Сърнън се оказва последният човек, стъпил на Луната.
-Франция остава най-големият износител на електроенергия в Европа през 2021 г.
-
-7.3. Думата се членува с пълен член, когато е в заглавие, текст към изображение и подобни, употребена е без глагол и пред нея няма предлог.
-
-„Последният самурай“, „Старецът и морето“
-Моят дядо, сниман в Пловдив
-
-► Но: „Приключенията на добрия войник Швейк“
-
-(За употребата на пълен член вижте по-подробно в тази статия.)
-
-7.4. Когато думата не е подлог в изречението, нито пояснява подлога, тя се членува с кратък член (-а или -я). Може да се направи проверка, като членуваната дума или цялото словосъчетание се замени с него/го (в някои случаи – с тогава, там).
-
-За три години обиколих целия континент.
-(За три години го обиколих.)
-
-Няколко пъти получателката не беше открита на адреса.
-(Няколко пъти получателката не беше открита там.)
-
-► Ако пред думата има предлог (на, в, с, за, от, при и др.), тя със сигурност не е подлог, нито определение към подлога, затова се членува с кратък член.
-
-Бъди спокоен, няма да се поддам на външния натиск.
-(При проверка: Бъди спокоен, няма да се поддам на него.)
-
-7.5. Само с кратък член се членуват прякорите и прозвищата – дори и когато са подлог в изречението.
-
-В подкаста ни днес се включва Камен Алипиев – Кедъра, един от известните спортни журналисти в България.
-
-(За употребата на кратък член вижте по-подробно в тази статия.)
-
-7.6. Членува се първата дума в собствени имена, които означават институции, организации и подобни на тях.
-
-Управителят на Българската народна банка заяви, че присъединяването ни към еврозоната е политически въпрос. (а не: на Българска народна банка)
-Цяло лято артистите от Софийската опера и балет ще изнасят представления. (а не: от Софийска опера и балет)
-
-7.7. Когато две или повече определения се отнасят за два или повече обекта или групи обекти, се членуват всички определения.
-
-Извършени са 2320 проверки на територията на Северното и Южното Черноморие. (два обекта: Северното Черноморие и Южното Черноморие)
-
-Румънските леки коли, прибиращи се от българските и гръцките курорти, затрудняват движението в Русе. (две групи обекти: български курорти и гръцки курорти)
-
-7.8. Бройната форма е специална форма за мн.ч. с окончание -а или -я. Тя се употребява, когато съществителното име не означава хора и е употребено след числително бройно име (четири, седемнайсет, 489) или след думите колко, няколко, колкото, толкова.
-
-четири автомобила (а не: четири автомобили)
-седемнайсет нарциса (а не: седемнайсет нарциси)
-сто-двеста гвоздея (а не: сто-двеста гвоздеи)
-колко екземпляра (а не: колко екземпляри)
-няколко разказа (а не: няколко разкази)
-
-► Бройната форма се употребява и когато между числителното име (също и колко, няколко, колкото, толкова) и съществителното име стои определение.
-
-Потеглих към новия си живот с два огромни сиви куфара.
-
-7.9. При съществителните имена, които означават хора, се употребява само обикновената форма за мн.ч., включително след числително бройно име (четирима, седемнайсет, 489) и думите колко, няколко, колкото, толкова.
-
-четирима пианисти (а не: четирима пианиста)
-седемнайсет санитари (а не: седемнайсет санитаря)
-сто-двеста участници (а не: сто-двеста участника)
-колко пенсионери (а не: колко пенсионера)
-няколко поддръжници (а не: няколко поддръжника)
-
-7.10. След думите десетки, стотици, милиони, милиарди (с които не се посочва точно количество), както и след думите двойка, тройка, десетка, дузина, чифт (съществителни имена) се употребява обикновената форма за мн.ч.
-
-Десетки гълъби полетяха в небето на Бургас като символ на правото на достоен живот. (а не: десетки гълъба).
-Токовите удари в малките населени места продължават да причиняват щети за хиляди левове. (а не: хиляди лева)
-
-2.1. Слято се пишат прилагателните имена, които са образувани от съчетание на прилагателно и съществително име. 
-
-етеричномаслен – от етерично масло
-млечнокисел – от млечна киселина
-граничнополицейски – от гранична полиция
-източноазиатски – от Източна Азия
-
-2.2. Слято се пишат думите със следните често срещани първи части, повечето от чужд произход: авто, анти, аудио, био, вице, евро, еко, електро, кибер, кино, макро, мега, микро, мини, мото, мулти, нарко, нео, под, полу, пост, пра, прес, промо, радио, свръх, смарт, соц, спец, супер, съ, термо, транс, ултра, фото, хидро, хипер и др.
-
-автоуслуги, антибактериален, аудиосистема, биоферма, вицепрезидент, евродепутат, екотуризъм, електротабло, киберзащита, киноиндустрия, макрониво, мегапопулярен, микрокредит, минибар, мотописта, мултикултурен, наркокомуна, неонацист, подзаконов, полужив, постдигитален, прадядо, прессъобщение, промоцена, радиочестота, свръхпечалба, смартчасовник, соцмузей, спецполицай, супермощен, съфинансиране, термочаша, трансконтинентален, ултралек, фотостудио, хидротехника, хиперпродукция
-
-► Но: евро-атлантически (Думата е образувана от равноправни части – евро(пейски) и атлантически, вж. т. 2.4.)
-
-2.3. Слято се пишат прилагателните имена, чиято първа част е наречие и пояснява втората част – прилагателно име или причастие (глаголна форма, която завършва на -щ, -н или -м). Необходимо условие е двете части да образуват смислово единство.
-
-взаимноприемлив, крайнодесен, общодостъпен, светлосин, яркочервен, властимащ, генномодифициран, високопроходим
-
-► Такива прилагателни често имат първа част високо, вътрешно, горе, долу, ниско, ново, средно.
-
-високоинтелигентен, вътрешнобанков, гореизброен, долупосочен, нискорисков, новопостъпил, средноаритметичен
-
- 2.4. Полуслято се пишат съществителните и прилагателните имена, както и наречията, чиито части са в смислово равноправни отношения помежду си (между тях най-често може да се вмъкне и: старт-финал – старт и финал; черно-бял – черен и бял).
-
-внос-износ; административно-битов, мускулно-скелетен, финансово-икономически; напред-назад, едва-едва
-
-2.5. Полуслято се пишат думите, съдържащи число, когато представляват комбинация от цифри и букви.
-
-5-годишен, 6-месечен, 3-стаен
-
-► Но: петгодишен, шестмесечен, тристаен (Думите са написани само с букви.)
-
-2.6. Полуслято се пишат степенуваните прилагателни имена, причастия и наречия.
-
-по-красива, по-щадящ, по-кратко
-най-умен, най-четена, най-често
-
-2.7. Разделно се пишат съчетанията от две съществителни имена, ако второто пояснява първото и първото може да се членува: кокошка носачка – кокошката носачка.
-
-лекар анестезиолог, художник символист, фирма посредник
-
-► Но: кандидат-кмет, заместник-директор (Пишат се полуслято, защото се членува втората част: кандидат-кметът, заместник-директорът.)
-
- 2.8. И разделно, и слято се пишат съществителните имена с една или две чужди съставни части, които отговарят на следните условия: а) първата част пояснява втората; б) двете части са свързани без съединителна гласна (о или е); в) двете части се употребяват като самостоятелни думи в българския език.
-
-гел лак и геллак; рок концерт и рокконцерт; фен клуб и фенклуб; фитнес зала и фитнесзала
-
-► Но: скречпостер, толтакса, тестдрайв (Думите не отговарят на условие в – първата или втората им част не се употребява като самостоятелна дума, затова се пишат само слято.)
-
-2.9. Частицата не се пише разделно, когато стои пред глагол или деепричастие (глаголна форма, завършваща на -йки).
-
-не знам, не сме, не искат
-не знаейки, не искайки
-
-2.10. Частицата не се пише слято с прилагателните имена и с причастията, които се употребяват като прилагателни.
-
-неправилно (изпреварване), нечетлив (почерк), необикновена (ваканция), неизненадващо (изказване), непроверен (сигнал)
-
-За всички неразбрали ще прочета текста отново.
-► Но: Участниците не разбрали кога започва състезанието. (Употребено е като глагол.)
-</common_rules>"""
-            ),
-        ]
+        # Fall back to default instruction
+        logger.info("Using default system instruction")
+        return [types.Part.from_text(text=BG_SYSTEM_INSTRUCTION)]
 
     def _get_example_content(self) -> List[types.Content]:
         """Get example content for the model."""
@@ -218,29 +98,205 @@ class GeminiProvider(ModelProvider):
         Returns:
             The corrected text
         """
-        contents = self._get_example_content()
-        contents.append(
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part.from_text(text=text),
-                ],
-            ),
-        )
+        logger.info("Preparing to correct text")
 
-        generate_content_config = types.GenerateContentConfig(
-            temperature=0.2,
-            top_p=0.95,
-            top_k=40,
-            max_output_tokens=8192,
-            response_mime_type="text/plain",
-            system_instruction=self._get_system_instruction(),
-        )
+        # Check if text is empty
+        if not text or not text.strip():
+            logger.warning("Empty text provided to correct_text()")
+            return text
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=contents,
-            config=generate_content_config,
-        )
+        # Add logging to verify input integrity
+        logger.info(f"Text length received by provider: {len(text)} characters")
+        import hashlib
 
-        return response.text
+        text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+        logger.info(f"Text hash in provider: {text_hash}")
+
+        # Log input text boundaries for verification
+        if len(text) > 200:
+            logger.info(f"Text start: {text[:100]}...")
+            logger.info(f"Text end: ...{text[-100:]}")
+
+        # Save full input to a debug file
+        try:
+            from datetime import datetime
+            from pathlib import Path
+            import os
+
+            dumps_dir = Path(os.path.expanduser("~/subspell_dumps"))
+            dumps_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            input_file = dumps_dir / f"provider_input_{timestamp}.txt"
+
+            with open(input_file, "w", encoding="utf-8") as f:
+                f.write(text)
+            logger.info(f"Provider input saved to {input_file}")
+        except Exception as e:
+            logger.error(f"Failed to save input debug file: {str(e)}")
+
+        try:
+            contents = self._get_example_content()
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=text),
+                    ],
+                ),
+            )
+
+            logger.info(f"Setting up generate_content_config (model: {self.model})")
+            generate_content_config = types.GenerateContentConfig(
+                temperature=self.temperature,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                max_output_tokens=8192,
+                response_mime_type="text/plain",
+                system_instruction=self._get_system_instruction(),
+            )
+
+            logger.info("Calling Gemini API")
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=generate_content_config,
+                )
+
+                # Dump complete response for debugging
+                self._dump_response(response)
+
+                logger.info(f"Response received. Type: {type(response)}")
+
+                if hasattr(response, "text"):
+                    result = response.text
+                    logger.info(
+                        f"Response has text attribute. Result length: {len(result) if result else 0}"
+                    )
+                    if not result:
+                        logger.warning("Response.text is empty or None")
+                else:
+                    logger.error("Response does not have text attribute")
+                    # Try to extract text in alternative ways
+                    if hasattr(response, "parts"):
+                        parts_text = [
+                            part.text
+                            for part in response.parts
+                            if hasattr(part, "text")
+                        ]
+                        result = "\n".join(parts_text)
+                        logger.info(
+                            f"Extracted text from parts. Result length: {len(result)}"
+                        )
+                    else:
+                        logger.error("Cannot extract text from response")
+                        # Try to convert the whole response to string
+                        result = str(response)
+                        logger.info(
+                            f"Converted response to string. Result: {result[:100]}..."
+                        )
+
+                return result
+
+            except Exception as e:
+                logger.error(f"Error calling Gemini API: {type(e).__name__}: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
+
+        except Exception as e:
+            logger.error(
+                f"Unexpected error in correct_text: {type(e).__name__}: {str(e)}"
+            )
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
+    def _dump_response(self, response):
+        """Dump response to a file for debugging."""
+        try:
+            # Create dumps directory if it doesn't exist
+            dumps_dir = Path(os.path.expanduser("~/subspell_dumps"))
+            dumps_dir.mkdir(exist_ok=True)
+
+            # Create a timestamp for the filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dump_file = dumps_dir / f"gemini_response_{timestamp}.txt"
+
+            logger.info(f"Dumping response to {dump_file}")
+
+            # Write response attributes to file
+            with open(dump_file, "w", encoding="utf-8") as f:
+                f.write("=== GEMINI RESPONSE DUMP ===\n\n")
+                f.write(f"Response type: {type(response)}\n\n")
+
+                # Try to extract and write all attributes
+                f.write("=== ATTRIBUTES ===\n")
+                for attr in dir(response):
+                    if not attr.startswith("_"):  # Skip private attributes
+                        try:
+                            value = getattr(response, attr)
+                            # Handle method vs property
+                            if not callable(value):
+                                f.write(f"{attr}: {repr(value)}\n")
+                        except Exception as e:
+                            f.write(f"{attr}: Error accessing - {str(e)}\n")
+
+                # Try to get .text property specifically
+                f.write("\n=== TEXT PROPERTY ===\n")
+                try:
+                    if hasattr(response, "text"):
+                        f.write(f"response.text: {repr(response.text)}\n")
+                    else:
+                        f.write("No .text property found\n")
+                except Exception as e:
+                    f.write(f"Error accessing .text: {str(e)}\n")
+
+                # Try to get parts
+                f.write("\n=== PARTS ===\n")
+                try:
+                    if hasattr(response, "parts"):
+                        parts = response.parts
+                        f.write(f"Number of parts: {len(parts)}\n")
+                        for i, part in enumerate(parts):
+                            f.write(f"\nPart {i}:\n")
+                            f.write(f"  Type: {type(part)}\n")
+                            for part_attr in dir(part):
+                                if not part_attr.startswith("_"):
+                                    try:
+                                        part_value = getattr(part, part_attr)
+                                        if not callable(part_value):
+                                            f.write(
+                                                f"  {part_attr}: {repr(part_value)}\n"
+                                            )
+                                    except Exception as e:
+                                        f.write(
+                                            f"  {part_attr}: Error accessing - {str(e)}\n"
+                                        )
+                    else:
+                        f.write("No .parts property found\n")
+                except Exception as e:
+                    f.write(f"Error accessing parts: {str(e)}\n")
+
+                # Try to convert to raw representation
+                f.write("\n=== RAW STRING REPRESENTATION ===\n")
+                try:
+                    f.write(str(response))
+                except Exception as e:
+                    f.write(f"Error converting to string: {str(e)}\n")
+
+                # Try dict representation via __dict__
+                f.write("\n=== DICT REPRESENTATION ===\n")
+                try:
+                    if hasattr(response, "__dict__"):
+                        f.write(repr(response.__dict__))
+                    else:
+                        f.write("Object has no __dict__ attribute")
+                except Exception as e:
+                    f.write(f"Error getting __dict__: {str(e)}\n")
+
+            logger.info(f"Response dump completed to {dump_file}")
+            return dump_file
+
+        except Exception as e:
+            logger.error(f"Failed to dump response: {str(e)}")
+            logger.error(traceback.format_exc())
+            return None

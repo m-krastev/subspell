@@ -15,6 +15,12 @@ class SpellChecker:
         provider_name: str = "gemini",
         max_tokens_per_chunk: int = 5000,
         chunk_overlap: int = 200,
+        system_instruction: Optional[str] = None,
+        system_instruction_file: Optional[str] = None,
+        temperature: float = 0.2,
+        top_k: int = 40,
+        top_p: float = 0.95,
+        model: str = "gemini-2.0-flash",
         **provider_kwargs,
     ):
         """
@@ -24,9 +30,24 @@ class SpellChecker:
             provider_name: Name of the model provider to use
             max_tokens_per_chunk: Maximum tokens per chunk for batch processing
             chunk_overlap: Number of tokens to overlap between chunks for context
+            system_instruction: Inline system instruction text for the model
+            system_instruction_file: Path to a file containing system instructions
+            temperature: Controls randomness in the output (0.0 to 1.0)
+            top_k: Controls diversity via top-k sampling
+            top_p: Controls diversity via nucleus sampling
+            model: The model to use (e.g. "gemini-2.0-flash", "gemini-pro-vision")
             **provider_kwargs: Additional arguments for the provider
         """
-        self.provider = self._get_provider(provider_name, **provider_kwargs)
+        self.provider = self._get_provider(
+            provider_name,
+            system_instruction=system_instruction,
+            system_instruction_file=system_instruction_file,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            model=model,
+            **provider_kwargs
+        )
         self.max_tokens_per_chunk = max_tokens_per_chunk
         self.chunk_overlap = chunk_overlap
 
@@ -34,7 +55,15 @@ class SpellChecker:
         """Get the model provider based on name."""
         if provider_name.lower() == "gemini":
             api_key = kwargs.get("api_key") or os.environ.get("GEMINI_API_KEY")
-            return GeminiProvider(api_key=api_key)
+            return GeminiProvider(
+                api_key=api_key,
+                system_instruction=kwargs.get("system_instruction"),
+                system_instruction_file=kwargs.get("system_instruction_file"),
+                temperature=kwargs.get("temperature"),
+                top_k=kwargs.get("top_k"),
+                top_p=kwargs.get("top_p"),
+                model=kwargs.get("model", "gemini-2.0-flash"),
+            )
         else:
             raise ValueError(f"Unsupported provider: {provider_name}")
 

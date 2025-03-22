@@ -1,4 +1,4 @@
-from .cli import run
+from subspell.gui import run_gui
 
 if __name__ == "__main__":
-    run()
+    run_gui()

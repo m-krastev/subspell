@@ -1,90 +1,85 @@
 # SubSpell
 
-A command-line tool for spell checking and grammar correction in Bulgarian text, with special support for subtitle files (.srt and .ass).
+A subtitle spelling, punctuation and grammar correction tool with a modern GUI.
 
 ## Features
 
-- Spelling, punctuation, and grammar correction for Bulgarian text
-- Support for subtitle files (.srt and .ass/ssa formats)
-- Batch processing to optimize resource usage
-- Preserves subtitle formatting and timings
-- Command-line interface for easy integration
+- Modern, user-friendly GUI
+- Support for SRT and ASS/SSA subtitle formats
+- Powered by Google's Gemini AI
+- Configurable LLM parameters
+- Dark/Light theme support
+- Real-time diff view of changes
 
 ## Installation
 
-### Prerequisites
+### Pre-built Executables
+
+Pre-built executables are available for Windows, macOS, and Linux in the [GitHub Releases](https://github.com/mkrastev/subspell/releases) page.
+
+### Building from Source
+
+#### Prerequisites
 
 - Python 3.10 or higher
-- A Gemini API key ([Get one here](https://ai.google.dev/))
+- Windows, macOS, or Linux
 
-### Install from Source
+#### Build Steps
 
+1. Clone the repository:
 ```bash
-# Clone the repository
-git clone https://github.com/m-krastev/subspell.git
+git clone https://github.com/mkrastev/subspell.git
 cd subspell
-
-# Install the package
-pip install -e .
 ```
 
-### Configuration
-
-Set your Gemini API key as an environment variable:
-
+2. Create a virtual environment (recommended):
 ```bash
-export GEMINI_API_KEY="your-api-key"
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-Or provide it with the `--api-key` option when running the tool.
+3. Run the build script:
+```bash
+python build_gui.py
+```
+
+The executable will be created in the `dist` directory.
+
+### Development Builds
+
+Development builds are automatically created for each push to the main branch and pull request. You can find these builds in the [GitHub Actions](https://github.com/mkrastev/subspell/actions) page.
 
 ## Usage
 
-### Correcting Text
+1. Launch the application
+2. Configure your Gemini API key in the Tools menu
+3. Open a subtitle file (SRT or ASS/SSA)
+4. Click "Check Spelling" to start the correction process
+5. Review and apply changes as needed
+6. Save the corrected subtitle file
 
-```bash
-subspell text "Какво ще правябрат ми жена не ме е остъвила."
-```
+## Configuration
 
-### Correcting Subtitle Files
+The application supports various configuration options:
 
-```bash
-# Correct an SRT file
-subspell file path/to/subtitles.srt
-
-# Correct an ASS file with custom output path
-subspell file path/to/subtitles.ass -o path/to/corrected.ass
-
-# Use token-based batching (default)
-subspell file path/to/subtitles.srt --batch-size 0
-
-# Use fixed batch size
-subspell file path/to/subtitles.srt --batch-size 10
-```
-
-### Advanced Options
-
-```bash
-# Set maximum tokens per chunk
-subspell file path/to/subtitles.srt --max-tokens 4000
-
-# Set chunk overlap size
-subspell file path/to/subtitles.srt --chunk-overlap 150
-
-# Use a different provider (if implemented)
-subspell file path/to/subtitles.srt --provider alternative-provider
-```
+- LLM Prompt: Customize the instructions given to the AI
+- Temperature: Control randomness in the output (0.0-1.0)
+- Top K: Control diversity via top-k sampling (1-100)
+- Top P: Control diversity via nucleus sampling (0.0-1.0)
+- Model: Choose between different Gemini models
 
 ## Development
 
 ### Project Structure
 
 - `src/subspell/` - Main package
-  - `subspeller.py` - Core correction functionality
+  - `spellchecker.py` - Core correction functionality
   - `subtitle.py` - Subtitle parsing and writing
   - `cli.py` - Command-line interface
-  - `utils.py` - Utility functions
+  - `gui.py` - Graphical user interface
+  - `config.py` - Configuration management
   - `providers/` - Model providers
+    - `base.py` - Base provider interface
     - `gemini.py` - Gemini API integration
 
 ### Adding a New Provider
@@ -95,6 +90,14 @@ To add a new provider:
 2. Implement the `ModelProvider` interface
 3. Update the `_get_provider` method in `SpellChecker` class
 
+### Continuous Integration
+
+The project uses GitHub Actions for continuous integration:
+
+- Builds executables for Windows, macOS, and Linux
+- Creates GitHub releases when tags are pushed
+- Runs on every push to main and pull request
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details

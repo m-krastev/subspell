@@ -38,6 +38,11 @@ def main(args: List[str] = None) -> int:
         help="Number of subtitle entries to process in a batch (0 for token-based batching)",
     )
 
+    # GUI command
+    gui_parser = subparsers.add_parser(
+        "gui", help="Launch the graphical user interface"
+    )
+
     # Common options
     parser.add_argument("--provider", default="gemini", help="Model provider to use")
     parser.add_argument("--api-key", help="API key for the provider")
@@ -53,6 +58,37 @@ def main(args: List[str] = None) -> int:
         default=200,
         help="Number of tokens to overlap between chunks",
     )
+    parser.add_argument(
+        "--system-instruction",
+        help="Inline system instruction text for the model",
+    )
+    parser.add_argument(
+        "--system-instruction-file",
+        help="Path to a file containing system instructions for the model",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.2,
+        help="Controls randomness in the output (0.0 to 1.0)",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=40,
+        help="Controls diversity via top-k sampling",
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=0.95,
+        help="Controls diversity via nucleus sampling",
+    )
+    parser.add_argument(
+        "--model",
+        default="gemini-2.0-flash",
+        help="The model to use (e.g. gemini-pro, gemini-pro-vision)",
+    )
 
     # Parse arguments
     parsed_args = parser.parse_args(args)
@@ -61,6 +97,17 @@ def main(args: List[str] = None) -> int:
         parser.print_help()
         return 1
 
+    # Launch GUI if requested
+    if parsed_args.command == "gui":
+        try:
+            from .gui import run_gui
+
+            run_gui()
+            return 0
+        except Exception as e:
+            print(f"Error launching GUI: {str(e)}", file=sys.stderr)
+            return 1
+
     try:
         # Initialize spellchecker with selected provider
         spellchecker = SpellChecker(
@@ -68,6 +115,12 @@ def main(args: List[str] = None) -> int:
             api_key=parsed_args.api_key,
             max_tokens_per_chunk=parsed_args.max_tokens,
             chunk_overlap=parsed_args.chunk_overlap,
+            system_instruction=parsed_args.system_instruction,
+            system_instruction_file=parsed_args.system_instruction_file,
+            temperature=parsed_args.temperature,
+            top_k=parsed_args.top_k,
+            top_p=parsed_args.top_p,
+            model=parsed_args.model,
         )
 
         # Handle commands
