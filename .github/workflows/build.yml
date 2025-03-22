@@ -1,4 +1,4 @@
-name: Build SubSpell
+name: Build and Release
 
 on:
   push:
@@ -14,46 +14,70 @@ jobs:
         os: [windows-latest, macos-latest, ubuntu-latest]
         include:
           - os: windows-latest
-            artifact_name: SubSpell-Windows
-            artifact_path: dist/SubSpell.exe
+            python-version: '3.11'
           - os: macos-latest
-            artifact_name: SubSpell-macOS
-            artifact_path: dist/SubSpell.app
+            python-version: '3.11'
           - os: ubuntu-latest
-            artifact_name: SubSpell-Linux
-            artifact_path: dist/SubSpell
+            python-version: '3.11'
 
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
-    
+        python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller pillow google-generativeai pysubs2
-    
-    - name: Build executable
-      run: python build_gui.py
-    
-    - name: Sign Windows executable
+        pip install -e .
+        pip install cx_Freeze pillow
+
+    - name: Install build dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        # Download certificate from secrets
-        echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 -d > cert.pfx
-        
-        # Set environment variables for signing
-        echo "SIGN_CERTIFICATE=cert.pfx" >> $GITHUB_ENV
-        echo "SIGN_PASSWORD=${{ secrets.WINDOWS_CERT_PASSWORD }}" >> $GITHUB_ENV
-        
-        # Sign the executable
-        signtool sign /f cert.pfx /p ${{ secrets.WINDOWS_CERT_PASSWORD }} /t http://timestamp.digicert.com /d "Subtitle Spelling and Grammar Correction Tool" /v dist/SubSpell.exe
-    
+        choco install mingw -y
+
+    - name: Install build dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-dev
+
+    - name: Build Windows MSI
+      if: matrix.os == 'windows-latest'
+      run: |
+        python -m cx_Freeze bdist_msi
+
+    - name: Build macOS DMG
+      if: matrix.os == 'macos-latest'
+      run: |
+        python -m cx_Freeze bdist_dmg
+
+    - name: Build Linux AppImage
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        python -m cx_Freeze bdist_appimage
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact_name }}
-        path: ${{ matrix.artifact_path }} 
+        name: SubSpell-${{ matrix.os }}
+        path: |
+          dist/*.msi
+          dist/*.dmg
+          dist/*.AppImage
+
+    - name: Create Release
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/*.msi
+          dist/*.dmg
+          dist/*.AppImage
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
