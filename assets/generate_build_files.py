@@ -3,7 +3,7 @@ import os
 import sys
 from datetime import datetime
 
-def generate_manifest():
+def generate_manifest(script_dir):
     """Generate the app.manifest file with security and compatibility settings."""
     manifest_content = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
@@ -35,10 +35,11 @@ def generate_manifest():
   </application>
 </assembly>"""
     
-    with open("app.manifest", "w") as f:
+    manifest_path = os.path.join(script_dir, "app.manifest")
+    with open(manifest_path, "w") as f:
         f.write(manifest_content)
 
-def generate_version_info():
+def generate_version_info(script_dir):
     """Generate the file_version_info.txt file with version information."""
     current_year = datetime.now().year
     version_info = f"""VSVersionInfo(
@@ -71,10 +72,11 @@ def generate_version_info():
   ]
 )"""
     
-    with open("file_version_info.txt", "w") as f:
+    version_info_path = os.path.join(script_dir, "file_version_info.txt")
+    with open(version_info_path, "w") as f:
         f.write(version_info)
 
-def generate_spec_file():
+def generate_spec_file(script_dir):
     """Generate the PyInstaller spec file."""
     spec_content = """# -*- mode: python ; coding: utf-8 -*-
 
@@ -123,7 +125,8 @@ exe = EXE(
     manifest='app.manifest'
 )"""
     
-    with open("SubSpell.spec", "w") as f:
+    spec_path = os.path.join(script_dir, "SubSpell.spec")
+    with open(spec_path, "w") as f:
         f.write(spec_content)
 
 def main():
@@ -138,9 +141,9 @@ def main():
         sys.exit(1)
     
     print("Generating build configuration files...")
-    generate_manifest()
-    generate_version_info()
-    generate_spec_file()
+    generate_manifest(script_dir)
+    generate_version_info(script_dir)
+    generate_spec_file(script_dir)
     print("Build configuration files generated successfully!")
 
 if __name__ == "__main__":
