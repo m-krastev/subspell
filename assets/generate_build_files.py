@@ -36,7 +36,7 @@ def generate_manifest(script_dir):
 </assembly>"""
     
     manifest_path = os.path.join(script_dir, "app.manifest")
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding='utf-8') as f:
         f.write(manifest_content)
 
 def generate_version_info(script_dir):
@@ -62,7 +62,7 @@ def generate_version_info(script_dir):
            StringStruct(u'FileDescription', u'Subtitle Spelling and Grammar Correction Tool'),
            StringStruct(u'FileVersion', u'1.0.0'),
            StringStruct(u'InternalName', u'SubSpell'),
-           StringStruct(u'LegalCopyright', u'© {current_year} mkrastev'),
+           StringStruct(u'LegalCopyright', u'(c) {current_year} mkrastev'),
            StringStruct(u'OriginalFilename', u'SubSpell.exe'),
            StringStruct(u'ProductName', u'SubSpell'),
            StringStruct(u'ProductVersion', u'1.0.0')])
@@ -73,7 +73,7 @@ def generate_version_info(script_dir):
 )"""
     
     version_info_path = os.path.join(script_dir, "file_version_info.txt")
-    with open(version_info_path, "w") as f:
+    with open(version_info_path, "w", encoding='utf-8') as f:
         f.write(version_info)
 
 def generate_spec_file(script_dir):
@@ -126,7 +126,7 @@ exe = EXE(
 )"""
     
     spec_path = os.path.join(script_dir, "SubSpell.spec")
-    with open(spec_path, "w") as f:
+    with open(spec_path, "w", encoding='utf-8') as f:
         f.write(spec_content)
 
 def main():
