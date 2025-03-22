@@ -28,9 +28,9 @@ try:
     from .config import ConfigManager
 except ImportError:
     # Handle direct script execution
-    from spellchecker import SpellChecker
-    from subtitle import parse_subtitle_file, write_subtitle_file
-    from config import ConfigManager
+    from subspell.spellchecker import SpellChecker
+    from subspell.subtitle import parse_subtitle_file, write_subtitle_file
+    from subspell.config import ConfigManager
 
 @dataclass
 class Subtitle:
