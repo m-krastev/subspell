@@ -34,6 +34,19 @@ jobs:
     - name: Build executable
       run: python build_gui.py
     
+    - name: Sign Windows executable
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Download certificate from secrets
+        echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 -d > cert.pfx
+        
+        # Set environment variables for signing
+        echo "WINDOWS_CERT_PATH=cert.pfx" >> $GITHUB_ENV
+        echo "WINDOWS_CERT_PASSWORD=${{ secrets.WINDOWS_CERT_PASSWORD }}" >> $GITHUB_ENV
+        
+        # Sign the executable
+        signtool sign /f cert.pfx /p ${{ secrets.WINDOWS_CERT_PASSWORD }} /t http://timestamp.digicert.com /d "Subtitle Spelling and Grammar Correction Tool" /v dist/SubSpell.exe
+    
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
