@@ -40,17 +40,6 @@ jobs:
         pip install -e .
         pip install cx_Freeze pillow
 
-    - name: Install build dependencies (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        choco install mingw -y
-
-    - name: Install build dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3-dev
-
     - name: Generate icon
       run: |
         cd assets
