@@ -15,10 +15,16 @@ jobs:
         include:
           - os: windows-latest
             python-version: '3.11'
+            build-command: 'python -m cx_Freeze bdist_msi'
+            artifact-pattern: 'dist/*.msi'
           - os: macos-latest
             python-version: '3.11'
+            build-command: 'python -m cx_Freeze bdist_dmg'
+            artifact-pattern: 'dist/*.dmg'
           - os: ubuntu-latest
             python-version: '3.11'
+            build-command: 'python -m cx_Freeze bdist_appimage'
+            artifact-pattern: 'dist/*.AppImage'
 
     steps:
     - uses: actions/checkout@v4
@@ -27,6 +33,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
@@ -45,50 +52,20 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python3-dev
 
-    - name: Generate icon
-      run: |
-        cd assets
-        python generate_icon.py
-        cd ..
-
-    - name: Prepare AppImage icons
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        mkdir -p build/bdist.linux-x86_64/AppDir/share/icons
-        cp assets/icon.png build/bdist.linux-x86_64/AppDir/share/icons/icon.png
-
-    - name: Build Windows MSI
-      if: matrix.os == 'windows-latest'
-      run: |
-        python -m cx_Freeze bdist_msi
-
-    - name: Build macOS DMG
-      if: matrix.os == 'macos-latest'
-      run: |
-        python -m cx_Freeze bdist_dmg
-
-    - name: Build Linux AppImage
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        python -m cx_Freeze bdist_appimage
+    - name: Build distribution
+      run: ${{ matrix.build-command }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: SubSpell-${{ matrix.os }}
-        path: |
-          dist/*.msi
-          dist/*.dmg
-          dist/*.AppImage
+        path: ${{ matrix.artifact-pattern }}
 
     - name: Create Release
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: |
-          dist/*.msi
-          dist/*.dmg
-          dist/*.AppImage
+        files: ${{ matrix.artifact-pattern }}
         draft: false
         prerelease: false
       env:
