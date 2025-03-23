@@ -8,7 +8,6 @@ import threading
 import logging
 import traceback
 import time
-import tempfile
 from typing import List, Dict, Optional, Tuple, Set
 from dataclasses import dataclass
 import webbrowser
@@ -48,6 +47,49 @@ class Subtitle:
     def is_changed(self) -> bool:
         """Check if the subtitle has been modified."""
         return self.original != self.changed
+
+    def get_diffs(self) -> List[Tuple[int, Tuple[int, int], str]]:
+        """
+        Calculate the differences between original and changed text.
+        
+        Returns:
+            List of tuples containing (type, span, string) where:
+            - type: 1 for insertion, -1 for deletion
+            - span: tuple of (start_index, length)
+            - string: the text that was inserted or deleted
+        """
+        if not self.is_changed:
+            return []
+        
+        # Compare text directly
+        diffs = list(difflib.ndiff(self.original, self.changed))
+
+        return diffs
+
+    def change_type(self) -> str:
+        """
+        Determine the type of changes made to the subtitle.
+        
+        Returns:
+            'addition' if only insertions
+            'deletion' if only deletions
+            'mixed' if both insertions and deletions
+            'unchanged' if no changes
+        """
+        if not self.is_changed:
+            return 'unchanged'
+
+        diffs = self.get_diffs()
+        has_additions = any(diff[0] == "+" for diff in diffs)
+        has_deletions = any(diff[0] == "-" for diff in diffs)
+        
+        if has_additions and has_deletions:
+            return 'mixed'
+        elif has_additions:
+            return 'addition'
+        elif has_deletions:
+            return 'deletion'
+        return 'unchanged'
 
 class ModernTheme:
     """Modern theme colors and styles."""
@@ -242,9 +284,14 @@ class ModernDiffViewer(ttk.Frame):
         self.update_theme(self.theme)
 
     def show_subtitles(self, subtitles: List[Subtitle]):
-        """Show subtitles in the listview."""
+        """Show subtitles in the listview with character-level diff highlighting."""
         self.clear()
         self.subtitles = subtitles
+        
+        # Get the default font metrics using a temporary label
+        temp_label = ttk.Label(self, text="M")
+        base_height = temp_label.winfo_reqheight()
+        temp_label.destroy()
         
         # Calculate maximum lines needed
         max_lines = 1
@@ -254,21 +301,17 @@ class ModernDiffViewer(ttk.Frame):
                 changed_lines = subtitle.changed.count('\n') + subtitle.changed.count('\\N') + 1
                 max_lines = max(max_lines, original_lines, changed_lines)
         
-        # Set row height based on maximum lines
-        row_height = 20 + (max_lines - 1) * 15
-        self.style.configure("Treeview", rowheight=row_height)
+        # Calculate row height based on base height and number of lines
+        # Add padding for better readability
+        padding = base_height * 0.5  # 50% of base height for padding
+        row_height = base_height * max_lines + padding
         
-        # Configure tag styles for proper display
-        self.listview.tag_configure(
-            "changed",
-            background=self.theme["diff_add_bg"],
-            foreground=self.theme["diff_add_fg"]
-        )
-        self.listview.tag_configure(
-            "unchanged",
-            background=self.theme["text_bg"],
-            foreground=self.theme["text_fg"]
-        )
+        # Ensure minimum height for readability
+        min_height = base_height * 1.5  # 150% of base height
+        row_height = max(row_height, min_height)
+        
+        # Set the row height
+        self.style.configure("Treeview", rowheight=int(row_height))
         
         for subtitle in subtitles:
             # Skip unchanged items if filter is active
@@ -279,12 +322,41 @@ class ModernDiffViewer(ttk.Frame):
             original_display = subtitle.original.replace("\\N", "\n")
             changed_display = subtitle.changed.replace("\\N", "\n")
             
-            # Add the item
+            # Generate character-level diff
+            diff = list(difflib.ndiff(original_display, changed_display))
+            
+            # Format the diff with highlighting
+            original_formatted = ""
+            changed_formatted = ""
+            original_tags = []
+            changed_tags = []
+            
+            for d in diff:
+                if d.startswith('+'):
+                    changed_formatted += d[2:]
+                    changed_tags.append(("addition", len(changed_formatted) - len(d[2:]), len(changed_formatted)))
+                elif d.startswith('-'):
+                    original_formatted += d[2:]
+                    original_tags.append(("deletion", len(original_formatted) - len(d[2:]), len(original_formatted)))
+                else:
+                    original_formatted += d[2:]
+                    changed_formatted += d[2:]
+            
+            # Add the item with appropriate tag based on change type
+            change_type = subtitle.change_type()
+            tag = change_type if change_type != 'unchanged' else "unchanged"
+            
             item = self.listview.insert("", tk.END, values=(
                 str(subtitle.line_num),
-                original_display,
-                changed_display
-            ), tags=("changed" if subtitle.is_changed else "unchanged",))
+                original_formatted,
+                changed_formatted
+            ), tags=(tag,))
+            
+            # Apply character-level highlighting
+            for tag_name, start, end in original_tags:
+                self.listview.tag_add(tag_name, f"{item}#{start}", f"{item}#{end}")
+            for tag_name, start, end in changed_tags:
+                self.listview.tag_add(tag_name, f"{item}#{start}", f"{item}#{end}")
             
             if subtitle.is_changed:
                 self.changes.append(len(self.subtitles) - 1)
@@ -394,18 +466,24 @@ class ModernDiffViewer(ttk.Frame):
         """Update the appearance of changed items."""
         # Configure tag styles
         self.listview.tag_configure(
-            "changed",
+            "addition",
             background=self.theme["diff_add_bg"],
             foreground=self.theme["diff_add_fg"]
+        )
+        self.listview.tag_configure(
+            "deletion",
+            background=self.theme["diff_del_bg"],
+            foreground=self.theme["diff_del_fg"]
+        )
+        self.listview.tag_configure(
+            "mixed",
+            background="#fff3cd",  # Light yellow
+            foreground="#856404"   # Dark yellow
         )
         self.listview.tag_configure(
             "unchanged",
             background=self.theme["text_bg"],
             foreground=self.theme["text_fg"]
-        )
-        self.listview.tag_configure(
-            "separator",
-            background=self.theme["separator"]
         )
         
         # Update tags for all items
@@ -413,7 +491,9 @@ class ModernDiffViewer(ttk.Frame):
             item_idx = self.listview.index(item)
             if item_idx < len(self.subtitles):
                 subtitle = self.subtitles[item_idx]
-                self.listview.item(item, tags=("changed" if subtitle.is_changed else "unchanged",))
+                change_type = subtitle.change_type()
+                tag = change_type if change_type != 'unchanged' else "unchanged"
+                self.listview.item(item, tags=(tag,))
 
     def update_theme(self, theme):
         """Update the widget's theme colors."""
@@ -997,7 +1077,7 @@ class ModernSubSpellGUI(tk.Tk):
 
         instructions = ttk.Label(
             instruction_frame,
-            text="Enter your Gemini API key. If you don't have one, you can get it from:\nhttps://ai.google.dev/",
+            text="Enter your Gemini API key. If you don't have one, you can get it from:\nhttps://aistudio.google.com/apikey",
             wraplength=460,
             justify=tk.LEFT,
             font=("TkDefaultFont", 10)
@@ -1012,7 +1092,7 @@ class ModernSubSpellGUI(tk.Tk):
             font=("TkDefaultFont", 10)
         )
         link_label.pack(anchor=tk.W)
-        link_label.bind("<Button-1>", lambda e: self.open_url("https://ai.google.dev/"))
+        link_label.bind("<Button-1>", lambda e: self.open_url("https://aistudio.google.com/apikey"))
 
         ttk.Separator(dialog, orient="horizontal").pack(fill=tk.X, padx=20, pady=5)
 

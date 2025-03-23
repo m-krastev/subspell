@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
+from .language_rules import BG_SYSTEM_INSTRUCTION
 
 class ConfigManager:
     """Manages application configuration and preferences."""
@@ -51,7 +52,7 @@ class ConfigManager:
         """Get default configuration values."""
         return {
             "theme": "system",
-            "llm_prompt": "",
+            "llm_prompt": BG_SYSTEM_INSTRUCTION,
             "window_size": "1200x800",
             "window_position": None,
             "temperature": 0.2,
