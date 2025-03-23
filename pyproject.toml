@@ -59,14 +59,12 @@ shortcut_dir = "SubSpellMenu"
 
 [tool.cxfreeze.build_exe]
 includes = ["src.subspell.spellchecker", "src.subspell.subtitle", "src.subspell.config", "src.subspell"]
+packages = ["google.genai", "pysubs2", "src.subspell", "src.subspell.spellchecker", "src.subspell.subtitle", "src.subspell.config"]
 zip_include_packages = ["google-genai", "pysubs2"]
 include_msvcr = true
 
 [tool.cxfreeze.bdist_msi]
 add_to_path = true
-environment_variables = [
-    ["E_SUBSPELL_VAR", "=-*SUBSPELL_VAR", "1", "TARGETDIR"]
-]
 # use a different upgrade_code for your project
 upgrade_code = "{6B29FC40-CA47-1067-B31D-00DD010662DA}"
 
