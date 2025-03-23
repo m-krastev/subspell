@@ -52,7 +52,7 @@ script = "src/subspell/gui.py"
 base = "gui"
 target_name = "SubSpell"
 copyright = "SubSpell 0.0.2-dev"
-icon = "assets/icon.ico"
+icon = "assets/icon.png"
 shortcut_name = "SubSpell"
 shortcut_dir = "SubSpellMenu"
 
@@ -77,5 +77,5 @@ ProgId = [
     ["Prog.Id", 0, 0, "SubSpell is a subtitle spelling, punctuation and grammar correction tool", "IconId", 0]
 ]
 Icon = [
-    ["IconId", "assets/icon.ico"]
+    ["IconId", "assets/icon.png"]
 ]
