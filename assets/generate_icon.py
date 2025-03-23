@@ -50,7 +50,7 @@ def create_icon(output_path, size=256):
     draw.polygon(points, fill=(255, 255, 255, 255))
     
     # Save the icon
-    image.save(output_path, format='ICO', sizes=[(256, 256)])
+    image.save(output_path, format='PNG', sizes=[(256, 256)])
 
 if __name__ == "__main__":
-    create_icon("icon.ico") 
+    create_icon("icon.png") 

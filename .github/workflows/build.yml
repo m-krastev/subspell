@@ -45,6 +45,18 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python3-dev
 
+    - name: Generate icon
+      run: |
+        cd assets
+        python generate_icon.py
+        cd ..
+
+    - name: Prepare AppImage icons
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        mkdir -p build/bdist.linux-x86_64/AppDir/share/icons
+        cp assets/icon.png build/bdist.linux-x86_64/AppDir/share/icons/icon.png
+
     - name: Build Windows MSI
       if: matrix.os == 'windows-latest'
       run: |
@@ -80,4 +92,4 @@ jobs:
         draft: false
         prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
