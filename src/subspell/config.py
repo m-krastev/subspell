@@ -55,7 +55,7 @@ class ConfigManager:
             "llm_prompt": BG_SYSTEM_INSTRUCTION,
             "window_size": "1200x800",
             "window_position": None,
-            "temperature": 0.2,
+            "temperature": 0.0,
             "top_k": 40,
             "top_p": 0.95,
             "model": "gemini-2.0-flash",

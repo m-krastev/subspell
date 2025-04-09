@@ -315,52 +315,20 @@ class ModernDiffViewer(ttk.Frame):
         
         for subtitle in subtitles:
             # Skip unchanged items if filter is active
-            if self.show_only_changes and not subtitle.is_changed:
+            is_changed = subtitle.is_changed
+            if self.show_only_changes and not is_changed:
                 continue
-                
-            # Convert newlines to \n for display
-            original_display = subtitle.original.replace("\\N", "\n")
-            changed_display = subtitle.changed.replace("\\N", "\n")
-            
-            # Generate character-level diff
-            diff = list(difflib.ndiff(original_display, changed_display))
-            
-            # Format the diff with highlighting
-            original_formatted = ""
-            changed_formatted = ""
-            original_tags = []
-            changed_tags = []
-            
-            for d in diff:
-                if d.startswith('+'):
-                    changed_formatted += d[2:]
-                    changed_tags.append(("addition", len(changed_formatted) - len(d[2:]), len(changed_formatted)))
-                elif d.startswith('-'):
-                    original_formatted += d[2:]
-                    original_tags.append(("deletion", len(original_formatted) - len(d[2:]), len(original_formatted)))
-                else:
-                    original_formatted += d[2:]
-                    changed_formatted += d[2:]
-            
-            # Add the item with appropriate tag based on change type
-            change_type = subtitle.change_type()
-            tag = change_type if change_type != 'unchanged' else "unchanged"
-            
-            item = self.listview.insert("", tk.END, values=(
-                str(subtitle.line_num),
-                original_formatted,
-                changed_formatted
-            ), tags=(tag,))
-            
-            # Apply character-level highlighting
-            for tag_name, start, end in original_tags:
-                self.listview.tag_add(tag_name, f"{item}#{start}", f"{item}#{end}")
-            for tag_name, start, end in changed_tags:
-                self.listview.tag_add(tag_name, f"{item}#{start}", f"{item}#{end}")
-            
-            if subtitle.is_changed:
+
+            item = self.listview.insert(
+                "",
+                tk.END,
+                values=(str(subtitle.line_num), subtitle.original, subtitle.changed),
+                tags=subtitle.change_type(),
+            )
+
+            if is_changed:
                 self.changes.append(len(self.subtitles) - 1)
-        
+
         # Force a redraw to ensure proper height
         self.listview.update_idletasks()
         self.listview.update()
@@ -378,30 +346,33 @@ class ModernDiffViewer(ttk.Frame):
         if region == "cell":
             column = self.listview.identify_column(event.x)
             item = self.listview.identify_row(event.y)
-            
+
             if item and column:
                 # Get the column number (1-based)
                 col_num = int(column[1])
-                if col_num in [2, 3]:  # Only allow editing original and corrected columns
+                if col_num in [
+                    2,
+                    3,
+                ]:  # Only allow editing original and corrected columns
                     # Get the current value
                     current_value = self.listview.item(item)["values"][col_num - 1]
-                    
+
                     # Create text widget for multiline editing
                     text_widget = tk.Text(self.listview, wrap=tk.WORD, height=5)
                     text_widget.insert("1.0", current_value)
                     text_widget.tag_add("sel", "1.0", tk.END)
                     text_widget.focus_set()
-                    
+
                     # Position the text widget
                     x, y, w, h = self.listview.bbox(item, column)
                     text_widget.place(x=x, y=y, width=w, height=max(h * 3, 100))
-                    
+
                     def finish_editing(event):
                         new_value = text_widget.get("1.0", tk.END).strip()
                         values = list(self.listview.item(item)["values"])
                         values[col_num - 1] = new_value
                         self.listview.item(item, values=values)
-                        
+
                         # Update the subtitle
                         item_idx = self.listview.index(item)
                         if item_idx < len(self.subtitles):
@@ -410,26 +381,27 @@ class ModernDiffViewer(ttk.Frame):
                                 subtitle.original = new_value
                             else:  # Corrected column
                                 subtitle.changed = new_value
-                            
+
                             # Update changed status
-                            if subtitle.is_changed and item_idx not in self.changes:
+                            is_changed = subtitle.is_changed
+                            if is_changed and item_idx not in self.changes:
                                 self.changes.append(item_idx)
-                            elif not subtitle.is_changed and item_idx in self.changes:
+                            elif not is_changed and item_idx in self.changes:
                                 self.changes.remove(item_idx)
-                            
+
                             self.update_changed_items()
-                        
+
                         text_widget.destroy()
                         self.listview.focus_set()
-                    
+
                     def handle_return(event):
                         if event.state & 0x1:  # Shift is pressed
-                            text_widget.insert(tk.INSERT, "\n")
+                            text_widget.insert(tk.INSERT, "\\N")
                             return "break"  # Prevent default behavior
                         else:
                             finish_editing(event)
                             return "break"  # Prevent default behavior
-                    
+
                     text_widget.bind("<Return>", handle_return)
                     text_widget.bind("<Escape>", lambda e: text_widget.destroy())
                     text_widget.bind("<FocusOut>", finish_editing)
@@ -437,14 +409,16 @@ class ModernDiffViewer(ttk.Frame):
     def on_cell_edited(self, event):
         """Handle cell edit completion."""
         item = self.listview.focus()
-        column = self.listview.identify_column(self.listview.winfo_pointerx() - self.listview.winfo_rootx())
-        
+        column = self.listview.identify_column(
+            self.listview.winfo_pointerx() - self.listview.winfo_rootx()
+        )
+
         if item and column:
             # Get the column number (1-based)
             col_num = int(column[1])
             if col_num in [2, 3]:  # Only handle original and corrected columns
                 new_value = self.listview.item(item)["values"][col_num - 1]
-                
+
                 # Update the subtitle
                 item_idx = self.listview.index(item)
                 if item_idx < len(self.subtitles):
@@ -453,13 +427,13 @@ class ModernDiffViewer(ttk.Frame):
                         subtitle.original = new_value
                     else:  # Corrected column
                         subtitle.changed = new_value
-                    
+
                     # Update changed status
                     if subtitle.is_changed and item_idx not in self.changes:
                         self.changes.append(item_idx)
                     elif not subtitle.is_changed and item_idx in self.changes:
                         self.changes.remove(item_idx)
-                    
+
                     self.update_changed_items()
 
     def update_changed_items(self):
@@ -468,66 +442,74 @@ class ModernDiffViewer(ttk.Frame):
         self.listview.tag_configure(
             "addition",
             background=self.theme["diff_add_bg"],
-            foreground=self.theme["diff_add_fg"]
+            foreground=self.theme["diff_add_fg"],
         )
         self.listview.tag_configure(
             "deletion",
             background=self.theme["diff_del_bg"],
-            foreground=self.theme["diff_del_fg"]
+            foreground=self.theme["diff_del_fg"],
         )
         self.listview.tag_configure(
             "mixed",
             background="#fff3cd",  # Light yellow
-            foreground="#856404"   # Dark yellow
+            foreground="#856404",  # Dark yellow
         )
         self.listview.tag_configure(
             "unchanged",
             background=self.theme["text_bg"],
-            foreground=self.theme["text_fg"]
+            foreground=self.theme["text_fg"],
         )
-        
+
         # Update tags for all items
         for item in self.listview.get_children():
             item_idx = self.listview.index(item)
             if item_idx < len(self.subtitles):
                 subtitle = self.subtitles[item_idx]
                 change_type = subtitle.change_type()
-                tag = change_type if change_type != 'unchanged' else "unchanged"
+                tag = change_type if change_type != "unchanged" else "unchanged"
                 self.listview.item(item, tags=(tag,))
 
     def update_theme(self, theme):
         """Update the widget's theme colors."""
         self.theme = theme
-        
+
         # Configure base styles
         self.style.configure("Treeview", rowheight=20)
         self.style.configure("Treeview.Row", padding=2)
         self.style.configure("TFrame", background=self.theme["text_bg"])
-        self.style.configure("TLabel", background=self.theme["text_bg"], foreground=self.theme["text_fg"])
-        
+        self.style.configure(
+            "TLabel", background=self.theme["text_bg"], foreground=self.theme["text_fg"]
+        )
+
         # Configure Treeview colors
         self.style.map(
             "Treeview",
             background=[("selected", self.theme["select_bg"])],
             foreground=[("selected", self.theme["select_fg"])],
-            fieldbackground=[("selected", self.theme["select_bg"])]
+            fieldbackground=[("selected", self.theme["select_bg"])],
         )
-        
+
         # Update tags and force a redraw
         self.update_changed_items()
-        
+
         # Recalculate and apply row heights if we have subtitles
         if self.subtitles:
             max_lines = 1
             for subtitle in self.subtitles:
                 if not (self.show_only_changes and not subtitle.is_changed):
-                    original_lines = subtitle.original.count('\n') + subtitle.original.count('\\N') + 1
-                    changed_lines = subtitle.changed.count('\n') + subtitle.changed.count('\\N') + 1
+                    original_lines = (
+                        subtitle.original.count("\n")
+                        + subtitle.original.count("\\N")
+                        + 1
+                    )
+                    changed_lines = (
+                        subtitle.changed.count("\n") + subtitle.changed.count("\\N") + 1
+                    )
                     max_lines = max(max_lines, original_lines, changed_lines)
-            
+
             row_height = 20 + (max_lines - 1) * 15
             self.style.configure("Treeview", rowheight=row_height)
-        
+
         self.listview.update_idletasks()
         self.listview.update()
 
@@ -535,7 +517,7 @@ class ModernDiffViewer(ttk.Frame):
         """Handle selection changes in the listview."""
         selected_items = self.listview.selection()
         self.selected_changes = set()
-        
+
         for item in selected_items:
             item_idx = self.listview.index(item)
             if item_idx < len(self.subtitles):
@@ -580,6 +562,7 @@ class ModernDiffViewer(ttk.Frame):
         )
         self.show_subtitles(self.subtitles)  # Refresh the display with current filter
 
+
 class ModernSubSpellGUI(tk.Tk):
     """Modern main application window for SubSpell GUI."""
 
@@ -588,32 +571,36 @@ class ModernSubSpellGUI(tk.Tk):
 
         # Initialize configuration manager
         self.config = ConfigManager()
-        
+
         self.title("SubSpell - Subtitle Spell Checker")
-        
+
         # Set window size and position from config
         window_size = self.config.get("window_size", "1200x800")
         window_position = self.config.get("window_position")
         self.geometry(window_size)
         if window_position:
             self.geometry(f"+{window_position[0]}+{window_position[1]}")
-        
+
         # Set theme based on config
         theme_setting = self.config.get("theme", "system")
         if theme_setting == "system":
             self.dark_mode = self.is_system_dark_mode()
         else:
             self.dark_mode = theme_setting == "dark"
-        self.theme = ModernTheme.DARK_THEME if self.dark_mode else ModernTheme.LIGHT_THEME
-        
+        self.theme = (
+            ModernTheme.DARK_THEME if self.dark_mode else ModernTheme.LIGHT_THEME
+        )
+
         # Configure ttk styles
         self.style = ttk.Style()
         self.style.configure("Modern.TButton", padding=5)
-        
+
         # Configure root window style
         self.style.configure("TFrame", background=self.theme["bg"])
-        self.style.configure("TLabel", background=self.theme["bg"], foreground=self.theme["fg"])
-        
+        self.style.configure(
+            "TLabel", background=self.theme["bg"], foreground=self.theme["fg"]
+        )
+
         # Initialize variables
         self.spellchecker = None
         self.current_file = None
@@ -628,7 +615,7 @@ class ModernSubSpellGUI(tk.Tk):
 
         # Check for API key on startup
         self.check_api_key_on_startup()
-        
+
         # Bind window close event to save state
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -641,7 +628,7 @@ class ModernSubSpellGUI(tk.Tk):
         height = self.winfo_height()
         self.config.update({
             "window_position": [x, y],
-            "window_size": f"{width}x{height}"
+            "window_size": f"{width}x{height}",
         })
         self.destroy()
 
@@ -650,25 +637,36 @@ class ModernSubSpellGUI(tk.Tk):
         try:
             if sys.platform == "darwin":  # macOS
                 import subprocess
+
                 result = subprocess.run(
                     ["defaults", "read", "-g", "AppleInterfaceStyle"],
                     capture_output=True,
-                    text=True
+                    text=True,
                 )
                 return result.stdout.strip().lower() == "dark"
             elif sys.platform == "win32":  # Windows
                 import winreg
+
                 registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
-                key = winreg.OpenKey(registry, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+                key = winreg.OpenKey(
+                    registry,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                )
                 value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 return value == 0
             else:  # Linux and others
                 try:
                     import subprocess
+
                     result = subprocess.run(
-                        ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                        [
+                            "gsettings",
+                            "get",
+                            "org.gnome.desktop.interface",
+                            "color-scheme",
+                        ],
                         capture_output=True,
-                        text=True
+                        text=True,
                     )
                     return "dark" in result.stdout.lower()
                 except:
@@ -696,9 +694,7 @@ class ModernSubSpellGUI(tk.Tk):
         tools_menu.add_command(
             label="Configure LLM Prompt", command=self.configure_prompt
         )
-        tools_menu.add_command(
-            label="Toggle Dark Mode", command=self.toggle_theme
-        )
+        tools_menu.add_command(label="Toggle Dark Mode", command=self.toggle_theme)
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         # Help menu
@@ -716,10 +712,7 @@ class ModernSubSpellGUI(tk.Tk):
 
         # Open file button
         self.open_btn = ModernButton(
-            toolbar,
-            text="Open File",
-            command=self.open_file,
-            style="Modern.TButton"
+            toolbar, text="Open File", command=self.open_file, style="Modern.TButton"
         )
         self.open_btn.pack(side=tk.LEFT, padx=2)
 
@@ -728,16 +721,13 @@ class ModernSubSpellGUI(tk.Tk):
             toolbar,
             text="Check Spelling",
             command=self.check_spelling,
-            style="Modern.TButton"
+            style="Modern.TButton",
         )
         self.check_btn.pack(side=tk.LEFT, padx=2)
 
         # Save button
         self.save_btn = ModernButton(
-            toolbar,
-            text="Save",
-            command=self.save_file,
-            style="Modern.TButton"
+            toolbar, text="Save", command=self.save_file, style="Modern.TButton"
         )
         self.save_btn.pack(side=tk.LEFT, padx=2)
 
@@ -749,7 +739,7 @@ class ModernSubSpellGUI(tk.Tk):
             toolbar,
             text="Toggle Theme",
             command=self.toggle_theme,
-            style="Modern.TButton"
+            style="Modern.TButton",
         )
         self.theme_btn.pack(side=tk.LEFT, padx=2)
 
@@ -772,7 +762,7 @@ class ModernSubSpellGUI(tk.Tk):
             relief=tk.SUNKEN,
             anchor=tk.W,
             background=self.theme["status_bg"],
-            foreground=self.theme["status_fg"]
+            foreground=self.theme["status_fg"],
         )
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.status_var.set("Ready")
@@ -780,22 +770,25 @@ class ModernSubSpellGUI(tk.Tk):
     def toggle_theme(self):
         """Toggle between light and dark theme."""
         self.dark_mode = not self.dark_mode
-        self.theme = ModernTheme.DARK_THEME if self.dark_mode else ModernTheme.LIGHT_THEME
-        
+        self.theme = (
+            ModernTheme.DARK_THEME if self.dark_mode else ModernTheme.LIGHT_THEME
+        )
+
         # Save theme preference
         self.config.set("theme", "dark" if self.dark_mode else "light")
-        
+
         # Update root window style
         self.style.configure("TFrame", background=self.theme["bg"])
-        self.style.configure("TLabel", background=self.theme["bg"], foreground=self.theme["fg"])
-        
+        self.style.configure(
+            "TLabel", background=self.theme["bg"], foreground=self.theme["fg"]
+        )
+
         # Update text widgets
         self.diff_viewer.update_theme(self.theme)
-        
+
         # Update status bar
         self.status_bar.configure(
-            background=self.theme["status_bg"],
-            foreground=self.theme["status_fg"]
+            background=self.theme["status_bg"], foreground=self.theme["status_fg"]
         )
 
     def open_file(self):
@@ -816,7 +809,7 @@ class ModernSubSpellGUI(tk.Tk):
         try:
             self.current_file = filepath
             self.subtitle_data = parse_subtitle_file(filepath)
-            
+
             # Initialize subtitles list
             self.subtitles = []
             for i, subtitle in enumerate(self.subtitle_data, 1):
@@ -849,35 +842,28 @@ class ModernSubSpellGUI(tk.Tk):
 
         # Add progress label
         ttk.Label(
-            progress_dialog,
-            text="Checking spelling...",
-            font=("TkDefaultFont", 10)
+            progress_dialog, text="Checking spelling...", font=("TkDefaultFont", 10)
         ).pack(pady=10)
 
         # Add progress bar
         progress_bar = ttk.Progressbar(
-            progress_dialog,
-            mode="indeterminate",
-            length=200
+            progress_dialog, mode="indeterminate", length=200
         )
         progress_bar.pack(fill=tk.X, padx=20, pady=10)
         progress_bar.start()
 
         # Add status label
         status_label = ttk.Label(
-            progress_dialog,
-            text="This may take a while...",
-            font=("TkDefaultFont", 9)
+            progress_dialog, text="This may take a while...", font=("TkDefaultFont", 9)
         )
         status_label.pack(pady=5)
 
         # Check API key
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = self.config.get("api_key", "")
         if not api_key:
             progress_dialog.destroy()
             messagebox.showwarning(
-                "API Key Required",
-                "Please configure your Gemini API key first."
+                "API Key Required", "Please configure your Gemini API key first."
             )
             self.configure_api_key()
             return
@@ -953,11 +939,13 @@ class ModernSubSpellGUI(tk.Tk):
 
     def handle_spell_check_success(self, corrected_subtitles):
         """Handle successful spell check results."""
-        logger.info(f"Correction completed. {len(corrected_subtitles)} subtitles processed")
-        
+        logger.info(
+            f"Correction completed. {len(corrected_subtitles)} subtitles processed"
+        )
+
         # Update global state with corrected subtitles
         self.subtitles = corrected_subtitles
-        
+
         try:
             logger.info("Showing corrected subtitles")
             self.diff_viewer.show_subtitles(self.subtitles)
@@ -968,42 +956,44 @@ class ModernSubSpellGUI(tk.Tk):
             messagebox.showerror("Error", f"Failed to display changes: {str(e)}")
             self.status_var.set("Failed to display changes.")
 
-    def run_spell_check_blocking(self, subtitles, timestamp, result_container):
+    def run_spell_check_blocking(
+        self, subtitles: List[Subtitle], timestamp, result_container
+    ):
         """Run spell check in a blocking manner."""
         try:
             logger.info(f"Starting spell check. {len(subtitles)} subtitles to process")
             start_time = time.time()
 
-            # Convert subtitles to text format for spellchecker
-            text = ""
-            for subtitle in subtitles:
-                if text:
-                    text += "\n===SUBTITLE_SEPARATOR===\n"
-                text += subtitle.original
+            texts = [
+                subtitle.original.replace("\\N", "§LINEBREAK§").replace("<*>", "§TAG§")
+                for subtitle in subtitles
+            ]
+            texts = self.spellchecker.correct_subtitles(texts, 0)
 
-            # Get corrections from spellchecker
-            corrected_text = self.spellchecker.correct_text(text)
-            
+            logger.info(
+                f"Spell check completed. {len(texts)} subtitles processed. Time taken: {time.time() - start_time:.2f} seconds"
+            )
+
             # Parse corrected text back into subtitles
             corrected_subtitles = []
-            for i, subtitle_text in enumerate(corrected_text.split("\n===SUBTITLE_SEPARATOR===\n")):
+            for i, subtitle_text in enumerate(texts):
+                # Replace §LINEBREAK§ with \N for subtitle format
+                subtitle_text = (
+                    subtitle_text.strip()
+                    .replace("§LINEBREAK§", "\\N")
+                    .replace("§TAG§", "<*>")
+                )
                 if i < len(subtitles):
-                    corrected_subtitles.append(Subtitle(
-                        subtitles[i].line_num,
-                        subtitles[i].original,
-                        subtitle_text.strip()
-                    ))
+                    corrected_subtitles.append(
+                        Subtitle(
+                            subtitles[i].line_num, subtitles[i].original, subtitle_text
+                        )
+                    )
                 else:
                     # Handle case where spellchecker returned more subtitles than original
-                    corrected_subtitles.append(Subtitle(
-                        i + 1,
-                        subtitle_text.strip(),
-                        subtitle_text.strip()
-                    ))
-
-            end_time = time.time()
-            time_taken = end_time - start_time
-            logger.info(f"Correction took {time_taken:.2f} seconds")
+                    corrected_subtitles.append(
+                        Subtitle(i + 1, subtitle_text, subtitle_text)
+                    )
 
             result_container["result"] = corrected_subtitles
 
@@ -1037,24 +1027,17 @@ class ModernSubSpellGUI(tk.Tk):
             return
 
         try:
-            # Create a copy of subtitle_data to avoid modifying the original
-            corrected_data = self.subtitle_data.copy()
-            
             # Map subtitles back to the original format
             for subtitle in self.subtitles:
-                if subtitle.line_num <= len(corrected_data):
+                if subtitle.line_num <= len(self.subtitle_data):
                     # Update the text while preserving all other metadata
-                    corrected_data[subtitle.line_num - 1]["text"] = subtitle.changed
+                    self.subtitle_data[subtitle.line_num - 1]["text"] = subtitle.changed
 
             # Write the subtitles to the new file
-            write_subtitle_file(corrected_data, filepath)
+            write_subtitle_file(self.subtitle_data, filepath)
 
-            messagebox.showinfo(
-                "Success", f"Subtitle file saved to {filepath}"
-            )
-            self.status_var.set(
-                f"Saved subtitle to {os.path.basename(filepath)}"
-            )
+            messagebox.showinfo("Success", f"Subtitle file saved to {filepath}")
+            self.status_var.set(f"Saved subtitle to {os.path.basename(filepath)}")
 
         except Exception as e:
             logger.error(f"Error saving subtitle file: {str(e)}")
@@ -1080,7 +1063,7 @@ class ModernSubSpellGUI(tk.Tk):
             text="Enter your Gemini API key. If you don't have one, you can get it from:\nhttps://aistudio.google.com/apikey",
             wraplength=460,
             justify=tk.LEFT,
-            font=("TkDefaultFont", 10)
+            font=("TkDefaultFont", 10),
         )
         instructions.pack(anchor=tk.W)
 
@@ -1089,26 +1072,26 @@ class ModernSubSpellGUI(tk.Tk):
             text="Get API key",
             foreground="blue",
             cursor="hand2",
-            font=("TkDefaultFont", 10)
+            font=("TkDefaultFont", 10),
         )
         link_label.pack(anchor=tk.W)
-        link_label.bind("<Button-1>", lambda e: self.open_url("https://aistudio.google.com/apikey"))
+        link_label.bind(
+            "<Button-1>", lambda e: self.open_url("https://aistudio.google.com/apikey")
+        )
 
         ttk.Separator(dialog, orient="horizontal").pack(fill=tk.X, padx=20, pady=5)
 
         ttk.Label(
-            dialog,
-            text="Gemini API key:",
-            font=("TkDefaultFont", 10, "bold")
+            dialog, text="Gemini API key:", font=("TkDefaultFont", 10, "bold")
         ).pack(pady=5, padx=20, anchor=tk.W)
 
-        current_key = os.environ.get("GEMINI_API_KEY", "")
+        # Get current key from config or environment
+        current_key = self.config.get("api_key", "") or os.environ.get(
+            "GEMINI_API_KEY", ""
+        )
         api_key_var = tk.StringVar(value=current_key)
         api_key_entry = ttk.Entry(
-            dialog,
-            textvariable=api_key_var,
-            width=50,
-            font=("TkDefaultFont", 10)
+            dialog, textvariable=api_key_var, width=50, font=("TkDefaultFont", 10)
         )
         api_key_entry.pack(pady=5, padx=20, fill=tk.X)
 
@@ -1119,6 +1102,8 @@ class ModernSubSpellGUI(tk.Tk):
             api_key = api_key_var.get().strip()
             if api_key:
                 logger.info(f"Setting new API key: {'*' * 8}")
+                # Save to both config and environment
+                self.config.set("api_key", api_key)
                 os.environ["GEMINI_API_KEY"] = api_key
 
                 self.status_var.set("Testing API key...")
@@ -1172,18 +1157,12 @@ class ModernSubSpellGUI(tk.Tk):
                 messagebox.showwarning("Warning", "Please enter a valid API key.")
 
         save_btn = ModernButton(
-            button_frame,
-            text="Save",
-            command=save_api_key,
-            style="Modern.TButton"
+            button_frame, text="Save", command=save_api_key, style="Modern.TButton"
         )
         save_btn.pack(side=tk.LEFT, padx=5)
 
         cancel_btn = ModernButton(
-            button_frame,
-            text="Cancel",
-            command=dialog.destroy,
-            style="Modern.TButton"
+            button_frame, text="Cancel", command=dialog.destroy, style="Modern.TButton"
         )
         cancel_btn.pack(side=tk.RIGHT, padx=5)
 
@@ -1194,7 +1173,8 @@ class ModernSubSpellGUI(tk.Tk):
     def initialize_spellchecker(self):
         """Initialize the spellchecker."""
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
+            # Get API key from config or environment
+            api_key = self.config.get("api_key", "") or os.environ.get("GEMINI_API_KEY")
             if not api_key:
                 logger.error("No Gemini API key configured")
                 raise ValueError("Gemini API key is not configured")
@@ -1202,14 +1182,32 @@ class ModernSubSpellGUI(tk.Tk):
             self.status_var.set("Initializing spellchecker...")
             self.update_idletasks()
 
+            # Get LLM settings from config or environment
+            llm_prompt = self.config.get("llm_prompt", "") or os.environ.get(
+                "SUBSPELL_LLM_PROMPT"
+            )
+            temperature = float(
+                self.config.get("temperature", 0.2)
+                or os.environ.get("SUBSPELL_TEMPERATURE", 0.2)
+            )
+            top_k = int(
+                self.config.get("top_k", 40) or os.environ.get("SUBSPELL_TOP_K", 40)
+            )
+            top_p = float(
+                self.config.get("top_p", 0.95) or os.environ.get("SUBSPELL_TOP_P", 0.95)
+            )
+            model = self.config.get("model", "gemini-2.0-flash") or os.environ.get(
+                "SUBSPELL_MODEL", "gemini-2.0-flash"
+            )
+
             logger.info(f"Initializing SpellChecker with API key: {'*' * 8}")
             self.spellchecker = SpellChecker(
                 api_key=api_key,
-                system_instruction=self.config.get("llm_prompt", None),
-                temperature=self.config.get("temperature", 0.2),
-                top_k=self.config.get("top_k", 40),
-                top_p=self.config.get("top_p", 0.95),
-                model=self.config.get("model", "gemini-2.0-flash"),
+                system_instruction=llm_prompt,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                model=model,
             )
             logger.info(f"SpellChecker initialized: {type(self.spellchecker)}")
 
@@ -1222,8 +1220,14 @@ class ModernSubSpellGUI(tk.Tk):
                     logger.warning("Spellchecker test returned empty result")
             except Exception as e:
                 logger.warning(f"Spellchecker test failed: {str(e)}")
-
-            self.status_var.set("Ready")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                messagebox.showerror(
+                    "Error",
+                    f"Failed to initialize spellchecker:\n\n{type(e).__name__}: {str(e)}\n\n"
+                    "See console for detailed traceback.",
+                )
+                self.status_var.set("Initialization failed.")
+                return False
             return True
         except Exception as e:
             logger.error(
@@ -1240,7 +1244,9 @@ class ModernSubSpellGUI(tk.Tk):
 
     def check_api_key_on_startup(self):
         """Check if API key is set on startup and prompt if not."""
-        api_key = os.environ.get("GEMINI_API_KEY", "")
+        # Get API key from config or environment
+        api_key = self.config.get("api_key", "") or os.environ.get("GEMINI_API_KEY", "")
+
         if not api_key:
             messagebox.showinfo(
                 "API Key Required",
@@ -1266,7 +1272,7 @@ class ModernSubSpellGUI(tk.Tk):
         for idx in selected_indices:
             if idx < len(self.subtitles):
                 self.subtitles[idx].original = self.subtitles[idx].changed
-        
+
         self.diff_viewer.show_subtitles(self.subtitles)
         self.status_var.set(f"Applied {len(selected_indices)} changes")
 
@@ -1295,13 +1301,13 @@ class ModernSubSpellGUI(tk.Tk):
         instructions = ttk.Label(
             instruction_frame,
             text="Configure the LLM settings for spell checking. The prompt should include:\n"
-                 "- Instructions for correcting spelling, punctuation, and grammar\n"
-                 "- Any specific rules or requirements\n"
-                 "- Language-specific guidelines\n"
-                 "- Format preservation instructions",
+            "- Instructions for correcting spelling, punctuation, and grammar\n"
+            "- Any specific rules or requirements\n"
+            "- Language-specific guidelines\n"
+            "- Format preservation instructions",
             wraplength=560,
             justify=tk.LEFT,
-            font=("TkDefaultFont", 10)
+            font=("TkDefaultFont", 10),
         )
         instructions.pack(anchor=tk.W)
 
@@ -1312,9 +1318,7 @@ class ModernSubSpellGUI(tk.Tk):
         prompt_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
 
         ttk.Label(
-            prompt_frame,
-            text="LLM Prompt:",
-            font=("TkDefaultFont", 10, "bold")
+            prompt_frame, text="LLM Prompt:", font=("TkDefaultFont", 10, "bold")
         ).pack(anchor=tk.W)
 
         # Create text widget with scrollbar
@@ -1322,11 +1326,7 @@ class ModernSubSpellGUI(tk.Tk):
         text_frame.pack(fill=tk.BOTH, expand=True)
 
         prompt_text = scrolledtext.ScrolledText(
-            text_frame,
-            wrap=tk.WORD,
-            width=60,
-            height=15,
-            font=("TkDefaultFont", 10)
+            text_frame, wrap=tk.WORD, width=60, height=15, font=("TkDefaultFont", 10)
         )
         prompt_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
@@ -1342,9 +1342,13 @@ class ModernSubSpellGUI(tk.Tk):
         model_combo = ttk.Combobox(
             model_frame,
             textvariable=model_var,
-            values=["gemini-2.0-flash", "gemini-2.0-flash-experimental"],
+            values=[
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-lite",
+                "gemini-2.5-pro-preview-03-25",
+            ],
             state="readonly",
-            width=20
+            width=20,
         )
         model_combo.pack(side=tk.LEFT, padx=5)
 
@@ -1354,11 +1358,7 @@ class ModernSubSpellGUI(tk.Tk):
         ttk.Label(temp_frame, text="Temperature:").pack(side=tk.LEFT)
         temp_var = tk.DoubleVar(value=round(self.config.get("temperature", 0.2), 2))
         temp_scale = ttk.Scale(
-            temp_frame,
-            from_=0.0,
-            to=1.0,
-            variable=temp_var,
-            orient=tk.HORIZONTAL
+            temp_frame, from_=0.0, to=1.0, variable=temp_var, orient=tk.HORIZONTAL
         )
         temp_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         temp_entry = ttk.Entry(temp_frame, textvariable=temp_var, width=6)
@@ -1370,11 +1370,7 @@ class ModernSubSpellGUI(tk.Tk):
         ttk.Label(topk_frame, text="Top K:").pack(side=tk.LEFT)
         topk_var = tk.IntVar(value=int(self.config.get("top_k", 40)))
         topk_scale = ttk.Scale(
-            topk_frame,
-            from_=1,
-            to=100,
-            variable=topk_var,
-            orient=tk.HORIZONTAL
+            topk_frame, from_=1, to=100, variable=topk_var, orient=tk.HORIZONTAL
         )
         topk_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         topk_entry = ttk.Entry(topk_frame, textvariable=topk_var, width=6)
@@ -1386,11 +1382,7 @@ class ModernSubSpellGUI(tk.Tk):
         ttk.Label(topp_frame, text="Top P:").pack(side=tk.LEFT)
         topp_var = tk.DoubleVar(value=round(self.config.get("top_p", 0.95), 2))
         topp_scale = ttk.Scale(
-            topp_frame,
-            from_=0.0,
-            to=1.0,
-            variable=topp_var,
-            orient=tk.HORIZONTAL
+            topp_frame, from_=0.0, to=1.0, variable=topp_var, orient=tk.HORIZONTAL
         )
         topp_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         topp_entry = ttk.Entry(topp_frame, textvariable=topp_var, width=6)
@@ -1469,13 +1461,22 @@ class ModernSubSpellGUI(tk.Tk):
             def show_tooltip(event):
                 tooltip = tk.Toplevel()
                 tooltip.wm_overrideredirect(True)
-                tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
-                label = ttk.Label(tooltip, text=text, background="#ffffe0", relief="solid", borderwidth=1)
+                tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
+                label = ttk.Label(
+                    tooltip,
+                    text=text,
+                    background="#ffffe0",
+                    relief="solid",
+                    borderwidth=1,
+                )
                 label.pack()
+
                 def hide_tooltip(event):
                     tooltip.destroy()
+
                 widget.tooltip = tooltip
                 widget.bind("<Leave>", hide_tooltip)
+
             widget.bind("<Enter>", show_tooltip)
 
         create_tooltip(temp_entry, "Valid range: 0.0 to 1.0")
@@ -1494,14 +1495,14 @@ class ModernSubSpellGUI(tk.Tk):
             new_prompt = prompt_text.get("1.0", tk.END).strip()
             if new_prompt:
                 logger.info("Setting new LLM settings")
-                # Save to config with rounded values
+                # Save all settings to config
                 self.config.set("llm_prompt", new_prompt)
                 self.config.set("temperature", round(temp_var.get(), 2))
                 self.config.set("top_k", int(topk_var.get()))
                 self.config.set("top_p", round(topp_var.get(), 2))
                 self.config.set("model", model_var.get())
-                
-                # Update environment variables with rounded values
+
+                # Update environment variables
                 os.environ["SUBSPELL_LLM_PROMPT"] = new_prompt
                 os.environ["SUBSPELL_TEMPERATURE"] = str(round(temp_var.get(), 2))
                 os.environ["SUBSPELL_TOP_K"] = str(int(topk_var.get()))

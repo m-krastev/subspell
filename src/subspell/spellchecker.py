@@ -13,7 +13,7 @@ class SpellChecker:
     def __init__(
         self,
         provider_name: str = "gemini",
-        max_tokens_per_chunk: int = 5000,
+        max_tokens_per_chunk: int = 8192,
         chunk_overlap: int = 200,
         system_instruction: Optional[str] = None,
         system_instruction_file: Optional[str] = None,
@@ -66,6 +66,60 @@ class SpellChecker:
             )
         else:
             raise ValueError(f"Unsupported provider: {provider_name}")
+
+    def correct_subtitles(self, subtitles: list[str], batch_size: int = 0) -> list[str]:
+        """
+        Correct spelling, punctuation, and grammar in the given subtitles.
+
+        Args:
+            subtitles: The subtitle text[s] to correct
+            batch_size: Max batch size (0 means use token-based batching)
+        Returns:
+            The corrected subtitles
+        """
+        # Process subtitles in token-optimized batches
+        separator_str = "§SEP§"
+        if batch_size == 0:
+            # Use token-based batching - fill each batch to maximum capacity
+            batches = batch_items(
+                [{"text": subtitle} for subtitle in subtitles],
+                self.max_tokens_per_chunk,
+                "text",
+                separator_str,
+            )
+            batches = [[subtitle["text"] for subtitle in batch] for batch in batches]
+        else:
+            # Use fixed batch size if explicitly specified
+            total_subtitles = len(subtitles)
+            batches = [
+                subtitles[i : min(i + batch_size, total_subtitles)]
+                for i in range(0, total_subtitles, batch_size)
+            ]
+
+        # Process each batch
+        corrected_subtitles = []
+        for batch in batches:
+            # Skip empty batches
+            if not batch:
+                continue
+
+            # Combine texts with markers to separate them
+            combined_text = str.join(separator_str, batch)
+
+            # Process the combined text
+            corrected_combined = self.provider.correct_text(combined_text)
+
+            
+            if corrected_combined.endswith(
+                separator_str[:-1]
+            ) or corrected_combined.endswith(separator_str[:-2]):
+                corrected_combined += "\n"  # Ensure it ends with a newline
+
+            # Split the corrected text back into individual subtitles
+            corrected_texts = corrected_combined.split(separator_str)
+            corrected_subtitles.extend(corrected_texts)
+
+        return corrected_subtitles
 
     def correct_text(self, text: str) -> str:
         """
@@ -125,7 +179,7 @@ class SpellChecker:
             item["original_filepath"] = filepath
 
         # Process subtitles in token-optimized batches
-        if batch_size <= 0:
+        if batch_size == 0:
             # Use token-based batching - fill each batch to maximum capacity
             batches = batch_items(subtitle_data, self.max_tokens_per_chunk)
         else:

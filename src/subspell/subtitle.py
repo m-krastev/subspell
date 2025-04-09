@@ -66,14 +66,10 @@ def parse_ass(content: str, file_path: str = None) -> List[Dict[str, Any]]:
     subtitles = []
     for i, line in enumerate(subs):
         # Get plain text without formatting codes
-        plain_text = line.plaintext
-        
-        # Preserve \N as-is in the plaintext (don't convert to \n)
-        # We need to double-escape backslashes in the regex pattern
-        plain_text = re.sub(r'\\n', r'\\N', plain_text, flags=re.IGNORECASE)
-
-        # Get the original text with formatting codes
         raw_text = line.text
+
+        plain_text = re.sub(r'\\n', r'\\N', raw_text, flags=re.IGNORECASE)
+        plain_text = re.sub(r'(\{[^}]*\})', r'<*>', plain_text, flags=re.IGNORECASE | re.MULTILINE)
 
         subtitles.append({
             "index": i + 1,
@@ -176,22 +172,20 @@ def write_ass(
             line = subtitle["line"].copy()
             # Update text with corrected version
             if "text" in subtitle:
-                corrected_text = subtitle["text"]
+                corrected_text: str = subtitle["text"]
                 
                 # Ensure \N is preserved in the corrected text
                 # Convert \n to \N to maintain ASS format
                 corrected_text = corrected_text.replace('\n', '\\N')
+                corrected_text = corrected_text.replace('\\n', '\\N')
                 
                 # For ASS, we may need to preserve formatting tags
                 if "{" in line.text and "}" in line.text:
                     # Extract and preserve formatting tags
-                    tags = re.findall(r"(\{[^}]+\})", line.text)
-                    # Apply tags to the corrected text if possible
-                    if tags:
-                        # Simple approach: add all tags at the beginning
-                        line.text = ''.join(tags) + corrected_text
-                    else:
-                        line.text = corrected_text
+                    actual_tags = re.findall(r"(\{[^}]*\})", line.text)
+                    tags = re.findall("<*>", corrected_text)
+                    for actual_tag, tag in zip(actual_tags, tags):
+                        corrected_text = corrected_text.replace(tag, actual_tag, 1)
                 else:
                     line.text = corrected_text
             

@@ -1,4 +1,3 @@
-import os
 import logging
 import json
 import traceback
@@ -121,9 +120,8 @@ class GeminiProvider(ModelProvider):
         try:
             from datetime import datetime
             from pathlib import Path
-            import os
 
-            dumps_dir = Path(os.path.expanduser("~/subspell_dumps"))
+            dumps_dir = Path("~/subspell_dumps").expanduser()
             dumps_dir.mkdir(exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             input_file = dumps_dir / f"provider_input_{timestamp}.txt"
@@ -214,7 +212,7 @@ class GeminiProvider(ModelProvider):
         """Dump response to a file for debugging."""
         try:
             # Create dumps directory if it doesn't exist
-            dumps_dir = Path(os.path.expanduser("~/subspell_dumps"))
+            dumps_dir = Path("~/subspell_dumps").expanduser()
             dumps_dir.mkdir(exist_ok=True)
 
             # Create a timestamp for the filename
@@ -293,7 +291,6 @@ class GeminiProvider(ModelProvider):
                 except Exception as e:
                     f.write(f"Error getting __dict__: {str(e)}\n")
 
-            logger.info(f"Response dump completed to {dump_file}")
             return dump_file
 
         except Exception as e:

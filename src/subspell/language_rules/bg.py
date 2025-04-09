@@ -1,6 +1,9 @@
 """Bulgarian language rules for spell checking."""
 
-SYSTEM_INSTRUCTION = """<instruction>
+SYSTEM_INSTRUCTION = """<function>
+ALWAYS PRESERVE AND KEEP THE FOLLOWING TAGS : §LINEBREAK§;§SEP§;§TAG§ . DO NOT MODIFY THEM OR SWAP THEM!
+</function>
+<instruction>
 Генерирай списък с всички правописни, пунктуационни и граматични грешки, които могат да се намерят в текста. Бъди изчерпателен. 
 
 **Отговаряй само с коригирания текст.**

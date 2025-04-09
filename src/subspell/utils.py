@@ -17,17 +17,16 @@ def count_tokens(text: str) -> int:
     # This is not perfect but works as a conservative estimate
     words = re.findall(r"\w+", text)
     punctuation = re.findall(r"[^\w\s]", text)
-    return len(words) + len(punctuation)
+    return (len(words) + len(punctuation)) * 1.5
 
 
-def chunk_text(text: str, max_tokens: int = 5000, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, max_tokens: int = 8192) -> List[str]:
     """
     Split text into chunks that fit within the token limit.
 
     Args:
         text: Text to split
         max_tokens: Maximum tokens per chunk
-        overlap: Number of tokens to overlap between chunks for context
 
     Returns:
         List of text chunks
@@ -79,20 +78,6 @@ def chunk_text(text: str, max_tokens: int = 5000, overlap: int = 200) -> List[st
     # Add the last chunk if it's not empty
     if current_chunk:
         chunks.append(current_chunk)
-
-    # Add overlaps between chunks for better context
-    if len(chunks) > 1 and overlap > 0:
-        overlap_chunks = []
-        for i, chunk in enumerate(chunks):
-            if i == 0:
-                overlap_chunks.append(chunk)
-            else:
-                # Get the last part of the previous chunk for overlap
-                prev_chunk = chunks[i - 1]
-                overlap_text = get_overlap_text(prev_chunk, overlap)
-                overlap_chunks.append(overlap_text + chunk)
-
-        return overlap_chunks
 
     return chunks
 
@@ -152,7 +137,7 @@ def merge_corrected_chunks(
 
 
 def batch_items(
-    items: List[Dict[str, Any]], max_tokens: int, text_key: str = "text"
+    items: List[Dict[str, Any]], max_tokens: int, text_key: str = "text", separator: str = "\n===SUBTITLE_SEPARATOR===\n"
 ) -> List[List[Dict[str, Any]]]:
     """
     Group items into batches that fit within the token limit.
@@ -162,6 +147,7 @@ def batch_items(
         items: List of items (dictionaries) with text to batch
         max_tokens: Maximum tokens per batch
         text_key: Key in the dictionary that contains the text
+        separator: Separator string to use between items in a batch
 
     Returns:
         List of batches, where each batch is a list of items
@@ -172,7 +158,7 @@ def batch_items(
     batches = []
     current_batch = []
     current_token_count = 0
-    separator_tokens = count_tokens("\n===SUBTITLE_SEPARATOR===\n")
+    separator_tokens = count_tokens(separator)
 
     for item in items:
         item_text = item[text_key]
